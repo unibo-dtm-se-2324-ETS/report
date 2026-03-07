@@ -10,7 +10,8 @@ if (strlen($_SESSION['detsuid']==0)) {
 if(isset($_GET['delid']))
 {
 $rowid=intval($_GET['delid']);
-$query=mysqli_query($con,"delete from tblexpense where ID='$rowid'");
+$userid=$_SESSION['detsuid'];
+$query=mysqli_query($con,"delete from tblexpense where ID='$rowid' and UserId='$userid'");
 if($query){
 echo "<script>alert('Record successfully deleted');</script>";
 echo "<script>window.location.href='manage-expense.php'</script>";
@@ -82,26 +83,27 @@ echo "<script>alert('Something went wrong. Please try again');</script>";
                   <th>Action</th>
                 </tr>
               </thead>
+              <tbody>
               <?php
               $userid=$_SESSION['detsuid'];
 $ret=mysqli_query($con,"select * from tblexpense where UserId='$userid'");
 $cnt=1;
 while ($row=mysqli_fetch_array($ret)) {
-
 ?>
-              <tbody>
                 <tr>
                   <td><?php echo $cnt;?></td>
               
                   <td><?php  echo $row['ExpenseItem'];?></td>
                   <td><?php  echo $row['ExpenseCost'];?></td>
                   <td><?php  echo $row['ExpenseDate'];?></td>
-                  <td><a href="manage-expense.php?delid=<?php echo $row['ID'];?>">Delete</a>
+                  <td>
+                    <a class="btn btn-xs btn-primary" href="edit-expense.php?editid=<?php echo $row['ID'];?>"><em class="fa fa-pencil"></em> Edit</a>
+                    <a class="btn btn-xs btn-danger" href="manage-expense.php?delid=<?php echo $row['ID'];?>" onclick="return confirm('Delete this expense?');"><em class="fa fa-trash"></em> Delete</a>
+                  </td>
                 </tr>
                 <?php 
 $cnt=$cnt+1;
 }?>
-               
               </tbody>
             </table>
           </div>

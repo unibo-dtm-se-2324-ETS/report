@@ -5,10 +5,19 @@ include('includes/dbconnection.php');
 if (strlen($_SESSION['detsuid']==0)) {
   header('location:logout.php');
   } else{
+  $userid=$_SESSION['detsuid'];
+
+mysqli_query($con, "CREATE TABLE IF NOT EXISTS tblitems (
+  ID int(11) NOT NULL AUTO_INCREMENT,
+  UserId int(11) NOT NULL,
+  ItemName varchar(150) NOT NULL,
+  CreatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (ID),
+  KEY idx_userid (UserId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 if(isset($_POST['submit']))
   {
-  	$userid=$_SESSION['detsuid'];
     $dateexpense=$_POST['dateexpense'];
      $item=$_POST['item'];
      $costitem=$_POST['costitem'];
@@ -78,7 +87,16 @@ echo "<script>alert('Something went wrong. Please try again');</script>";
 								</div>
 								<div class="form-group">
 									<label>Item</label>
-									<input type="text" class="form-control" name="item" value="" required="true">
+									<select class="form-control" name="item" required="true">
+										<option value="">Select Item</option>
+										<?php
+										$itemret=mysqli_query($con,"select ItemName from tblitems where UserId='$userid' order by ItemName asc");
+										while($itemrow=mysqli_fetch_array($itemret)){
+										?>
+										<option value="<?php echo $itemrow['ItemName'];?>"><?php echo $itemrow['ItemName'];?></option>
+										<?php } ?>
+									</select>
+									<small><a href="add-item.php">Add new item</a> if you do not see your item here.</small>
 								</div>
 								
 								<div class="form-group">
