@@ -164,7 +164,6 @@ $latestDate=$latestResult['ExpenseDate'];
 			margin: 0 0 8px;
 			font-size: 30px;
 			font-weight: 700;
-			color: #ffffff;
 		}
 		.dashboard-hero p {
 			margin: 0;
@@ -351,7 +350,7 @@ $latestDate=$latestResult['ExpenseDate'];
 			<div class="row">
 				<div class="col-md-7">
 					<h1>Expense overview</h1>
-					<p>A simple monthly dashboard with the numbers that matter most.</p>
+					<p>All in one dashboard</p>
 					<div class="hero-meta"><?php echo $selectedMonthLabel; ?> • <?php echo $selectedCurrency; ?></div>
 				</div>
 				<div class="col-md-5">
