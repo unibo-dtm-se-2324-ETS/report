@@ -504,6 +504,27 @@ $latestDate=$latestResult['ExpenseDate'];
 			var topItemLabels = <?php echo json_encode($topItemLabels); ?>;
 			var topItemValues = <?php echo json_encode($topItemValues); ?>;
 
+			if (Chart.types.BarWithLabels === undefined) {
+				Chart.types.Bar.extend({
+					name: "BarWithLabels",
+					draw: function () {
+						Chart.types.Bar.prototype.draw.apply(this, arguments);
+
+						var ctx = this.chart.ctx;
+						ctx.font = "12px Montserrat";
+						ctx.fillStyle = "#0f172a";
+						ctx.textAlign = "center";
+						ctx.textBaseline = "bottom";
+
+						this.datasets.forEach(function (dataset) {
+							dataset.bars.forEach(function (bar) {
+								ctx.fillText(bar.value, bar.x, bar.y - 6);
+							});
+						});
+					}
+				});
+			}
+
 			var dailyCanvas = document.getElementById("dailyTrendChart");
 			if (dailyCanvas) {
 				var dailyData = {
@@ -535,7 +556,7 @@ $latestDate=$latestResult['ExpenseDate'];
 						data: topItemValues
 					}]
 				};
-				new Chart(itemsCanvas.getContext("2d")).Bar(itemsData, {
+				new Chart(itemsCanvas.getContext("2d")).BarWithLabels(itemsData, {
 					responsive: true,
 					barShowStroke: false
 				});
