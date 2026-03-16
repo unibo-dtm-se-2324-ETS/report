@@ -2,33 +2,89 @@
 session_start();
 error_reporting(0);
 include('includes/dbconnection.php');
-if (strlen($_SESSION['detsuid'] == 0)) {
+include('includes/expense-helpers.php');
+
+if (strlen($_SESSION['detsuid']) == 0) {
   header('location:logout.php');
-} else {
-  $userid = $_SESSION['detsuid'];
-  $editid = intval($_GET['editid']);
+  exit;
+}
 
-  mysqli_query($con, "CREATE TABLE IF NOT EXISTS tblitems (
-    ID int(11) NOT NULL AUTO_INCREMENT,
-    UserId int(11) NOT NULL,
-    ItemName varchar(150) NOT NULL,
-    CreatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (ID),
-    KEY idx_userid (UserId)
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$userid = (int)$_SESSION['detsuid'];
+$editid = isset($_GET['editid']) ? (int)$_GET['editid'] : 0;
+$msg = '';
 
-  if (isset($_POST['submit'])) {
-    $dateexpense = $_POST['dateexpense'];
-    $item = $_POST['item'];
-    $costitem = $_POST['costitem'];
-    $query = mysqli_query($con, "update tblexpense set ExpenseDate='$dateexpense', ExpenseItem='$item', ExpenseCost='$costitem' where ID='$editid' and UserId='$userid'");
-    if ($query) {
-      echo "<script>alert('Expense has been updated');</script>";
-      echo "<script>window.location.href='manage-expense.php'</script>";
+expense_ensure_schema($con);
+expense_ensure_user_categories($con, $userid);
+$csrfToken = expense_csrf_token();
+
+$expense = expense_fetch_one_assoc(
+  expense_prepare_and_execute(
+    $con,
+    "SELECT ID, ExpenseDate, ExpenseItem, ExpenseCost, Currency, CategoryId FROM tblexpense WHERE ID=? AND UserId=? LIMIT 1",
+    'ii',
+    array($editid, $userid)
+  )
+);
+
+if (!$expense) {
+  $msg = 'Invalid expense record.';
+}
+
+$form = array(
+  'dateexpense' => $expense ? $expense['ExpenseDate'] : date('Y-m-d'),
+  'item' => $expense ? $expense['ExpenseItem'] : '',
+  'costitem' => $expense ? $expense['ExpenseCost'] : '',
+  'currency' => $expense ? expense_selected_currency($expense['Currency']) : 'USD',
+  'categoryid' => $expense && $expense['CategoryId'] ? (string)$expense['CategoryId'] : ''
+);
+
+if ($expense && isset($_POST['submit'])) {
+  $form['dateexpense'] = isset($_POST['dateexpense']) ? trim($_POST['dateexpense']) : '';
+  $form['item'] = isset($_POST['item']) ? trim($_POST['item']) : '';
+  $form['costitem'] = isset($_POST['costitem']) ? trim($_POST['costitem']) : '';
+  $form['currency'] = expense_selected_currency(isset($_POST['currency']) ? $_POST['currency'] : 'USD');
+  $form['categoryid'] = isset($_POST['categoryid']) ? trim($_POST['categoryid']) : '';
+  $categoryId = (int)$form['categoryid'];
+
+  if (!expense_verify_csrf(isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '')) {
+    $msg = 'Your session expired. Please try again.';
+  } elseif ($form['dateexpense'] == '' || !strtotime($form['dateexpense'])) {
+    $msg = 'Please choose a valid expense date.';
+  } elseif ($form['item'] == '') {
+    $msg = 'Please select an item.';
+  } elseif ($form['costitem'] == '' || !is_numeric($form['costitem']) || (float)$form['costitem'] <= 0) {
+    $msg = 'Please enter a valid cost greater than zero.';
+  } elseif ($categoryId <= 0) {
+    $msg = 'Please choose a category.';
+  } else {
+    $category = expense_find_category_by_id($con, $userid, $categoryId);
+    if (!$category) {
+      $msg = 'The selected category is invalid.';
     } else {
-      $msg = "Something went wrong. Please try again";
+      $cost = (float)$form['costitem'];
+      $stmt = expense_prepare_and_execute(
+        $con,
+        "UPDATE tblexpense SET ExpenseDate=?, ExpenseItem=?, ExpenseCost=?, Currency=?, CategoryId=? WHERE ID=? AND UserId=?",
+        'ssdsiii',
+        array($form['dateexpense'], $form['item'], $cost, $form['currency'], $categoryId, $editid, $userid)
+      );
+
+      if ($stmt) {
+        expense_close_statement($stmt);
+        header('Location: manage-expense.php?status=updated');
+        exit;
+      }
+
+      $msg = 'Something went wrong. Please try again.';
     }
   }
+}
+
+$items = expense_fetch_all_assoc(
+  expense_prepare_and_execute($con, "SELECT ItemName FROM tblitems WHERE UserId=? ORDER BY ItemName ASC", 'i', array($userid))
+);
+$categories = expense_get_categories($con, $userid);
+$currencyOptions = expense_currency_options();
 ?>
 <!DOCTYPE html>
 <html>
@@ -41,66 +97,93 @@ if (strlen($_SESSION['detsuid'] == 0)) {
   <link href="css/datepicker3.css" rel="stylesheet">
   <link href="css/styles.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css?family=Montserrat:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+  <style>
+    .expense-shell { padding-top: 24px; padding-bottom: 30px; background: linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%); min-height: 100vh; }
+    .expense-card { background: #fff; border: 1px solid #dbe4ee; border-radius: 18px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06); padding: 24px; }
+    .page-title { margin: 0 0 6px; font-size: 28px; font-weight: 700; color: #0f172a; }
+    .page-copy { margin: 0 0 22px; color: #64748b; }
+    .alert-inline { margin-bottom: 18px; }
+  </style>
 </head>
 <body>
   <?php include_once('includes/header.php'); ?>
   <?php include_once('includes/sidebar.php'); ?>
 
-  <div class="col-sm-9 col-sm-offset-3 col-lg-10 col-lg-offset-2 main">
-    <div class="row">
-      <ol class="breadcrumb">
-        <li><a href="#"><em class="fa fa-home"></em></a></li>
-        <li><a href="manage-expense.php">Expense</a></li>
-        <li class="active">Edit Expense</li>
-      </ol>
-    </div>
-
+  <div class="col-sm-9 col-sm-offset-3 col-lg-10 col-lg-offset-2 main expense-shell">
     <div class="row">
       <div class="col-lg-12">
-        <div class="panel panel-default">
-          <div class="panel-heading">Edit Expense</div>
-          <div class="panel-body">
-            <p style="font-size:16px; color:red" align="center"><?php if ($msg) { echo $msg; } ?></p>
-            <div class="col-md-12">
-              <?php
-              $ret = mysqli_query($con, "select * from tblexpense where ID='$editid' and UserId='$userid'");
-              $row = mysqli_fetch_array($ret);
-              if ($row) {
-              ?>
-              <form role="form" method="post" action="">
+        <div class="expense-card">
+          <ol class="breadcrumb">
+            <li><a href="dashboard.php"><em class="fa fa-home"></em></a></li>
+            <li><a href="manage-expense.php">Expenses</a></li>
+            <li class="active">Edit Expense</li>
+          </ol>
+
+          <h1 class="page-title">Edit expense</h1>
+          <p class="page-copy">Update the item, budget category, amount, and currency.</p>
+
+          <?php if ($msg != '') { ?>
+          <div class="alert alert-danger alert-inline"><?php echo expense_h($msg); ?></div>
+          <?php } ?>
+
+          <?php if ($expense) { ?>
+          <form method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?php echo expense_h($csrfToken); ?>">
+            <div class="row">
+              <div class="col-md-6">
                 <div class="form-group">
-                  <label>Date of Expense</label>
-                  <input class="form-control" type="date" value="<?php echo $row['ExpenseDate']; ?>" name="dateexpense" required="true">
+                  <label for="dateexpense">Date of Expense</label>
+                  <input class="form-control" type="date" id="dateexpense" name="dateexpense" required value="<?php echo expense_h($form['dateexpense']); ?>">
                 </div>
+              </div>
+              <div class="col-md-6">
                 <div class="form-group">
-                  <label>Item</label>
-                  <select class="form-control" name="item" required="true">
-                    <option value="<?php echo $row['ExpenseItem']; ?>"><?php echo $row['ExpenseItem']; ?></option>
-                    <?php
-                    $itemret = mysqli_query($con, "select ItemName from tblitems where UserId='$userid' order by ItemName asc");
-                    while ($itemrow = mysqli_fetch_array($itemret)) {
-                      if ($itemrow['ItemName'] == $row['ExpenseItem']) {
-                        continue;
-                      }
-                    ?>
-                    <option value="<?php echo $itemrow['ItemName']; ?>"><?php echo $itemrow['ItemName']; ?></option>
+                  <label for="currency">Currency</label>
+                  <select class="form-control" id="currency" name="currency" required>
+                    <?php foreach ($currencyOptions as $currency) { ?>
+                    <option value="<?php echo expense_h($currency); ?>" <?php if ($form['currency'] == $currency) { echo 'selected'; } ?>><?php echo expense_h($currency); ?></option>
                     <?php } ?>
                   </select>
                 </div>
-                <div class="form-group">
-                  <label>Cost of Item</label>
-                  <input class="form-control" type="text" value="<?php echo $row['ExpenseCost']; ?>" required="true" name="costitem">
-                </div>
-                <div class="form-group has-success">
-                  <button type="submit" class="btn btn-primary" name="submit">Update</button>
-                  <a href="manage-expense.php" class="btn btn-default">Cancel</a>
-                </div>
-              </form>
-              <?php } else { ?>
-              <p align="center" style="color:red">Invalid expense record.</p>
-              <?php } ?>
+              </div>
             </div>
-          </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="item">Item</label>
+                  <select class="form-control" id="item" name="item" required>
+                    <option value="">Select item</option>
+                    <?php foreach ($items as $itemRow) { ?>
+                    <option value="<?php echo expense_h($itemRow['ItemName']); ?>" <?php if ($form['item'] == $itemRow['ItemName']) { echo 'selected'; } ?>><?php echo expense_h($itemRow['ItemName']); ?></option>
+                    <?php } ?>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="categoryid">Category</label>
+                  <select class="form-control" id="categoryid" name="categoryid" required>
+                    <option value="">Select category</option>
+                    <?php foreach ($categories as $category) { ?>
+                    <option value="<?php echo (int)$category['ID']; ?>" <?php if ((string)$form['categoryid'] === (string)$category['ID']) { echo 'selected'; } ?>><?php echo expense_h($category['CategoryName']); ?></option>
+                    <?php } ?>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="costitem">Cost of Item</label>
+              <input class="form-control" type="number" min="0.01" step="0.01" id="costitem" name="costitem" required value="<?php echo expense_h($form['costitem']); ?>" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <button type="submit" class="btn btn-primary" name="submit">Update Expense</button>
+              <a href="manage-expense.php" class="btn btn-default">Cancel</a>
+            </div>
+          </form>
+          <?php } ?>
         </div>
       </div>
       <?php include_once('includes/footer.php'); ?>
@@ -109,12 +192,7 @@ if (strlen($_SESSION['detsuid'] == 0)) {
 
   <script src="js/jquery-1.11.1.min.js"></script>
   <script src="js/bootstrap.min.js"></script>
-  <script src="js/chart.min.js"></script>
-  <script src="js/chart-data.js"></script>
-  <script src="js/easypiechart.js"></script>
-  <script src="js/easypiechart-data.js"></script>
   <script src="js/bootstrap-datepicker.js"></script>
   <script src="js/custom.js"></script>
 </body>
 </html>
-<?php } ?>

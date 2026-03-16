@@ -5,7 +5,7 @@ include('includes/dbconnection.php');
 ?>
 <?php
 $currentPage = basename($_SERVER['PHP_SELF']);
-$expensePages = array('add-expense.php', 'manage-expense.php', 'add-item.php', 'edit-expense.php');
+$expensePages = array('add-expense.php', 'manage-expense.php', 'add-item.php', 'edit-expense.php', 'manage-categories.php');
 $reportPages = array(
     'expense-datewise-reports.php',
     'expense-datewise-reports-detailed.php',
@@ -56,6 +56,9 @@ $name=$row['FullName'];
                     </a></li>
                     <li><a class="<?php echo ($currentPage == 'add-item.php') ? 'active' : ''; ?>" href="add-item.php">
                         <span class="fa fa-arrow-right">&nbsp;</span> Add Items
+                    </a></li>
+                    <li><a class="<?php echo ($currentPage == 'manage-categories.php') ? 'active' : ''; ?>" href="manage-categories.php">
+                        <span class="fa fa-arrow-right">&nbsp;</span> Categories & Budgets
                     </a></li>
                     
                 </ul>
