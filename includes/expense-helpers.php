@@ -154,6 +154,16 @@ if (!function_exists('expense_ensure_schema')) {
       mysqli_query($con, "ALTER TABLE tblexpense ADD COLUMN CategoryId int(11) DEFAULT NULL AFTER Currency");
     }
 
+    $notesColumn = mysqli_query($con, "SHOW COLUMNS FROM tblexpense LIKE 'Notes'");
+    if ($notesColumn && mysqli_num_rows($notesColumn) == 0) {
+      mysqli_query($con, "ALTER TABLE tblexpense ADD COLUMN Notes text DEFAULT NULL AFTER CategoryId");
+    }
+
+    $receiptColumn = mysqli_query($con, "SHOW COLUMNS FROM tblexpense LIKE 'ReceiptPath'");
+    if ($receiptColumn && mysqli_num_rows($receiptColumn) == 0) {
+      mysqli_query($con, "ALTER TABLE tblexpense ADD COLUMN ReceiptPath varchar(255) DEFAULT NULL AFTER Notes");
+    }
+
     mysqli_query($con, "CREATE TABLE IF NOT EXISTS tblitems (
       ID int(11) NOT NULL AUTO_INCREMENT,
       UserId int(11) NOT NULL,
@@ -185,6 +195,34 @@ if (!function_exists('expense_ensure_schema')) {
       KEY idx_userid_month_currency (UserId, BudgetMonth, Currency),
       KEY idx_categoryid (CategoryId)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    mysqli_query($con, "CREATE TABLE IF NOT EXISTS tblrecurring (
+      ID int(11) NOT NULL AUTO_INCREMENT,
+      UserId int(11) NOT NULL,
+      ExpenseItem varchar(150) NOT NULL,
+      ExpenseCost decimal(12,2) NOT NULL DEFAULT 0.00,
+      Currency varchar(10) NOT NULL DEFAULT 'USD',
+      CategoryId int(11) NOT NULL,
+      Notes text DEFAULT NULL,
+      Frequency varchar(20) NOT NULL DEFAULT 'monthly',
+      StartDate date NOT NULL,
+      NextRunDate date NOT NULL,
+      LastRunDate date DEFAULT NULL,
+      IsActive tinyint(1) NOT NULL DEFAULT 1,
+      CreatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (ID),
+      KEY idx_userid_nextrun (UserId, NextRunDate)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $defaultCurrencyColumn = mysqli_query($con, "SHOW COLUMNS FROM tbluser LIKE 'DefaultCurrency'");
+    if ($defaultCurrencyColumn && mysqli_num_rows($defaultCurrencyColumn) == 0) {
+      mysqli_query($con, "ALTER TABLE tbluser ADD COLUMN DefaultCurrency varchar(10) NOT NULL DEFAULT 'USD' AFTER MobileNumber");
+    }
+
+    $defaultCategoryColumn = mysqli_query($con, "SHOW COLUMNS FROM tbluser LIKE 'DefaultCategoryId'");
+    if ($defaultCategoryColumn && mysqli_num_rows($defaultCategoryColumn) == 0) {
+      mysqli_query($con, "ALTER TABLE tbluser ADD COLUMN DefaultCategoryId int(11) DEFAULT NULL AFTER DefaultCurrency");
+    }
   }
 }
 
@@ -235,6 +273,138 @@ if (!function_exists('expense_budget_progress')) {
     $progress = ((float)$spent / (float)$budget) * 100;
 
     return max(0, min(100, $progress));
+  }
+}
+
+if (!function_exists('expense_get_user_settings')) {
+  function expense_get_user_settings($con, $userid) {
+    $defaults = array(
+      'DefaultCurrency' => 'USD',
+      'DefaultCategoryId' => null
+    );
+
+    $row = expense_fetch_one_assoc(
+      expense_prepare_and_execute(
+        $con,
+        "SELECT DefaultCurrency, DefaultCategoryId FROM tbluser WHERE ID=? LIMIT 1",
+        'i',
+        array($userid)
+      )
+    );
+
+    if (!$row) {
+      return $defaults;
+    }
+
+    $defaults['DefaultCurrency'] = expense_selected_currency($row['DefaultCurrency'], 'USD');
+    $defaults['DefaultCategoryId'] = $row['DefaultCategoryId'] ? (int)$row['DefaultCategoryId'] : null;
+
+    return $defaults;
+  }
+}
+
+if (!function_exists('expense_handle_receipt_upload')) {
+  function expense_handle_receipt_upload($file, $userid) {
+    if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+      return array('path' => '', 'error' => '');
+    }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+      return array('path' => '', 'error' => 'Receipt upload failed.');
+    }
+
+    $allowedExtensions = array('jpg', 'jpeg', 'png', 'pdf');
+    $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+    if (!in_array($extension, $allowedExtensions)) {
+      return array('path' => '', 'error' => 'Receipt must be a JPG, PNG, or PDF file.');
+    }
+
+    $uploadDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'receipts';
+    if (!is_dir($uploadDir)) {
+      mkdir($uploadDir, 0777, true);
+    }
+
+    $filename = 'receipt_' . $userid . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+    $targetPath = $uploadDir . DIRECTORY_SEPARATOR . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+      return array('path' => '', 'error' => 'Could not save the uploaded receipt.');
+    }
+
+    return array(
+      'path' => 'uploads/receipts/' . $filename,
+      'error' => ''
+    );
+  }
+}
+
+if (!function_exists('expense_delete_receipt_file')) {
+  function expense_delete_receipt_file($relativePath) {
+    $relativePath = trim((string)$relativePath);
+
+    if ($relativePath === '') {
+      return;
+    }
+
+    $fullPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, $relativePath);
+    if (is_file($fullPath)) {
+      @unlink($fullPath);
+    }
+  }
+}
+
+if (!function_exists('expense_process_recurring')) {
+  function expense_process_recurring($con, $userid) {
+    $today = date('Y-m-d');
+    $stmt = expense_prepare_and_execute(
+      $con,
+      "SELECT ID, ExpenseItem, ExpenseCost, Currency, CategoryId, Notes, Frequency, NextRunDate
+       FROM tblrecurring
+       WHERE UserId=? AND IsActive=1 AND NextRunDate<=?
+       ORDER BY NextRunDate ASC",
+      'is',
+      array($userid, $today)
+    );
+    $rows = expense_fetch_all_assoc($stmt);
+
+    foreach ($rows as $row) {
+      $nextRun = $row['NextRunDate'];
+      $frequency = $row['Frequency'];
+
+      while ($nextRun <= $today) {
+        $insertStmt = expense_prepare_and_execute(
+          $con,
+          "INSERT INTO tblexpense (UserId, ExpenseDate, ExpenseItem, ExpenseCost, Currency, CategoryId, Notes, ReceiptPath)
+           VALUES (?, ?, ?, ?, ?, ?, ?, '')",
+          'issdsis',
+          array(
+            $userid,
+            $nextRun,
+            $row['ExpenseItem'],
+            (float)$row['ExpenseCost'],
+            $row['Currency'],
+            $row['CategoryId'],
+            $row['Notes']
+          )
+        );
+        expense_close_statement($insertStmt);
+
+        if ($frequency === 'weekly') {
+          $nextRun = date('Y-m-d', strtotime($nextRun . ' +7 days'));
+        } else {
+          $nextRun = date('Y-m-d', strtotime($nextRun . ' +1 month'));
+        }
+      }
+
+      $updateStmt = expense_prepare_and_execute(
+        $con,
+        "UPDATE tblrecurring SET LastRunDate=?, NextRunDate=? WHERE ID=? AND UserId=?",
+        'ssii',
+        array($today, $nextRun, $row['ID'], $userid)
+      );
+      expense_close_statement($updateStmt);
+    }
   }
 }
 ?>

@@ -11,26 +11,30 @@ if (strlen($_SESSION['detsuid']) == 0) {
 
 $userid = (int)$_SESSION['detsuid'];
 $msg = '';
-$success = '';
 $currencyOptions = expense_currency_options();
+
+expense_ensure_schema($con);
+expense_ensure_user_categories($con, $userid);
+expense_process_recurring($con, $userid);
+
+$csrfToken = expense_csrf_token();
+$settings = expense_get_user_settings($con, $userid);
 $form = array(
   'dateexpense' => date('Y-m-d'),
   'item' => '',
   'costitem' => '',
-  'currency' => 'USD',
-  'categoryid' => ''
+  'currency' => $settings['DefaultCurrency'],
+  'categoryid' => $settings['DefaultCategoryId'] ? (string)$settings['DefaultCategoryId'] : '',
+  'notes' => ''
 );
-
-expense_ensure_schema($con);
-expense_ensure_user_categories($con, $userid);
-$csrfToken = expense_csrf_token();
 
 if (isset($_POST['submit'])) {
   $form['dateexpense'] = isset($_POST['dateexpense']) ? trim($_POST['dateexpense']) : date('Y-m-d');
   $form['item'] = isset($_POST['item']) ? trim($_POST['item']) : '';
   $form['costitem'] = isset($_POST['costitem']) ? trim($_POST['costitem']) : '';
-  $form['currency'] = expense_selected_currency(isset($_POST['currency']) ? $_POST['currency'] : 'USD');
+  $form['currency'] = expense_selected_currency(isset($_POST['currency']) ? $_POST['currency'] : $settings['DefaultCurrency']);
   $form['categoryid'] = isset($_POST['categoryid']) ? trim($_POST['categoryid']) : '';
+  $form['notes'] = isset($_POST['notes']) ? trim($_POST['notes']) : '';
   $categoryId = (int)$form['categoryid'];
 
   if (!expense_verify_csrf(isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '')) {
@@ -48,21 +52,27 @@ if (isset($_POST['submit'])) {
     if (!$category) {
       $msg = 'The selected category is invalid.';
     } else {
-      $cost = (float)$form['costitem'];
-      $stmt = expense_prepare_and_execute(
-        $con,
-        "INSERT INTO tblexpense (UserId, ExpenseDate, ExpenseItem, ExpenseCost, Currency, CategoryId) VALUES (?, ?, ?, ?, ?, ?)",
-        'issdsi',
-        array($userid, $form['dateexpense'], $form['item'], $cost, $form['currency'], $categoryId)
-      );
+      $upload = expense_handle_receipt_upload(isset($_FILES['receipt']) ? $_FILES['receipt'] : array(), $userid);
+      if ($upload['error'] !== '') {
+        $msg = $upload['error'];
+      } else {
+        $cost = (float)$form['costitem'];
+        $receiptPath = $upload['path'];
+        $stmt = expense_prepare_and_execute(
+          $con,
+          "INSERT INTO tblexpense (UserId, ExpenseDate, ExpenseItem, ExpenseCost, Currency, CategoryId, Notes, ReceiptPath) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          'issdsiss',
+          array($userid, $form['dateexpense'], $form['item'], $cost, $form['currency'], $categoryId, $form['notes'], $receiptPath)
+        );
 
-      if ($stmt) {
-        expense_close_statement($stmt);
-        header('Location: manage-expense.php?status=added');
-        exit;
+        if ($stmt) {
+          expense_close_statement($stmt);
+          header('Location: manage-expense.php?status=added');
+          exit;
+        }
+
+        $msg = 'Something went wrong. Please try again.';
       }
-
-      $msg = 'Something went wrong. Please try again.';
     }
   }
 }
@@ -88,7 +98,6 @@ $categories = expense_get_categories($con, $userid);
     .expense-card { background: #fff; border: 1px solid #dbe4ee; border-radius: 18px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06); padding: 24px; }
     .page-title { margin: 0 0 6px; font-size: 28px; font-weight: 700; color: #0f172a; }
     .page-copy { margin: 0 0 22px; color: #64748b; }
-    .form-actions { margin-top: 22px; }
     .helper-links { margin-top: 8px; color: #64748b; font-size: 12px; }
     .helper-links a { font-weight: 600; }
     .alert-inline { margin-bottom: 18px; }
@@ -109,13 +118,13 @@ $categories = expense_get_categories($con, $userid);
           </ol>
 
           <h1 class="page-title">Add expense</h1>
-          <p class="page-copy">Capture the amount, category, and currency in one step.</p>
+          <p class="page-copy">Capture the amount, category, note, receipt, and currency in one step.</p>
 
           <?php if ($msg != '') { ?>
           <div class="alert alert-danger alert-inline"><?php echo expense_h($msg); ?></div>
           <?php } ?>
 
-          <form method="post" action="">
+          <form method="post" action="" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?php echo expense_h($csrfToken); ?>">
             <div class="row">
               <div class="col-md-6">
@@ -163,12 +172,27 @@ $categories = expense_get_categories($con, $userid);
               </div>
             </div>
 
-            <div class="form-group">
-              <label for="costitem">Cost of Item</label>
-              <input class="form-control" type="number" min="0.01" step="0.01" id="costitem" name="costitem" required value="<?php echo expense_h($form['costitem']); ?>" placeholder="0.00">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="costitem">Cost of Item</label>
+                  <input class="form-control" type="number" min="0.01" step="0.01" id="costitem" name="costitem" required value="<?php echo expense_h($form['costitem']); ?>" placeholder="0.00">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="receipt">Receipt</label>
+                  <input class="form-control" type="file" id="receipt" name="receipt" accept=".jpg,.jpeg,.png,.pdf">
+                </div>
+              </div>
             </div>
 
-            <div class="form-group form-actions">
+            <div class="form-group">
+              <label for="notes">Notes</label>
+              <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="Optional details about this expense"><?php echo expense_h($form['notes']); ?></textarea>
+            </div>
+
+            <div class="form-group">
               <button type="submit" class="btn btn-primary" name="submit">Add Expense</button>
               <a href="manage-expense.php" class="btn btn-default">Cancel</a>
             </div>

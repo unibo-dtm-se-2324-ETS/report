@@ -29,13 +29,25 @@ if (!function_exists('report_money')) {
 if (!function_exists('report_selected_currency')) {
   function report_selected_currency($requestKey) {
     $options = report_currency_options();
-    $currency = isset($_POST[$requestKey]) ? strtoupper(trim($_POST[$requestKey])) : 'USD';
+    if (isset($_POST[$requestKey])) {
+      $currency = strtoupper(trim($_POST[$requestKey]));
+    } elseif (isset($_GET[$requestKey])) {
+      $currency = strtoupper(trim($_GET[$requestKey]));
+    } else {
+      $currency = 'USD';
+    }
 
     if (!in_array($currency, $options)) {
       $currency = 'USD';
     }
 
     return $currency;
+  }
+}
+
+if (!function_exists('report_h')) {
+  function report_h($value) {
+    return htmlentities((string)$value, ENT_QUOTES, 'UTF-8');
   }
 }
 ?>

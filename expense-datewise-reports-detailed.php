@@ -9,8 +9,8 @@ if (strlen($_SESSION['detsuid']==0)) {
   $userid = $_SESSION['detsuid'];
   $currency = report_selected_currency('currency');
   $msg = '';
-  $fromDate = isset($_POST['fromdate']) ? $_POST['fromdate'] : '';
-  $toDate = isset($_POST['todate']) ? $_POST['todate'] : '';
+  $fromDate = isset($_POST['fromdate']) ? $_POST['fromdate'] : (isset($_GET['fromdate']) ? $_GET['fromdate'] : '');
+  $toDate = isset($_POST['todate']) ? $_POST['todate'] : (isset($_GET['todate']) ? $_GET['todate'] : '');
   $rows = array();
   $labels = array();
   $values = array();
@@ -18,6 +18,7 @@ if (strlen($_SESSION['detsuid']==0)) {
   $recordCount = 0;
   $topPeriodLabel = 'N/A';
   $topPeriodValue = 0;
+  $exportLink = '';
 
   $currencyColumn = mysqli_query($con, "SHOW COLUMNS FROM tblexpense LIKE 'Currency'");
   if (mysqli_num_rows($currencyColumn) == 0) {
@@ -47,6 +48,30 @@ if (strlen($_SESSION['detsuid']==0)) {
         }
       }
     }
+
+    $exportLink = 'expense-datewise-reports-detailed.php?' . http_build_query(array(
+      'fromdate' => $fromDate,
+      'todate' => $toDate,
+      'currency' => $currency,
+      'export' => 'csv'
+    ));
+  }
+
+  if ($msg == '' && isset($_GET['export']) && $_GET['export'] === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=daily-report-' . date('Ymd-His') . '.csv');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, array('Date', 'Total', 'Currency'));
+    foreach ($rows as $row) {
+      fputcsv($output, array(
+        $row['ExpenseDate'],
+        number_format((float)$row['totalamount'], 2, '.', ''),
+        $currency
+      ));
+    }
+    fputcsv($output, array('Grand Total', number_format((float)$totalExpense, 2, '.', ''), $currency));
+    fclose($output);
+    exit;
   }
 ?>
 <!DOCTYPE html>
@@ -89,10 +114,11 @@ if (strlen($_SESSION['detsuid']==0)) {
   <div class="col-sm-9 col-sm-offset-3 col-lg-10 col-lg-offset-2 main report-shell">
     <div class="report-block">
       <h1 class="report-title">Daily report</h1>
-      <p class="report-subtitle">Range: <strong><?php echo htmlentities($fromDate); ?></strong> to <strong><?php echo htmlentities($toDate); ?></strong> in <strong><?php echo $currency; ?></strong></p>
-      <a class="toolbar-link btn btn-default" href="expense-datewise-reports.php?cur=<?php echo $currency; ?>">Change filters</a>
+      <p class="report-subtitle">Range: <strong><?php echo report_h($fromDate); ?></strong> to <strong><?php echo report_h($toDate); ?></strong> in <strong><?php echo report_h($currency); ?></strong></p>
+      <a class="toolbar-link btn btn-default" href="expense-datewise-reports.php?cur=<?php echo report_h($currency); ?>">Change filters</a>
+      <?php if ($msg == '') { ?><a class="toolbar-link btn btn-primary" href="<?php echo report_h($exportLink); ?>">Export CSV</a><?php } ?>
       <?php if ($msg != '') { ?>
-      <div class="alert-lite"><?php echo $msg; ?></div>
+      <div class="alert-lite"><?php echo report_h($msg); ?></div>
       <?php } ?>
     </div>
 

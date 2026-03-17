@@ -15,12 +15,13 @@ $msg = '';
 
 expense_ensure_schema($con);
 expense_ensure_user_categories($con, $userid);
+expense_process_recurring($con, $userid);
 $csrfToken = expense_csrf_token();
 
 $expense = expense_fetch_one_assoc(
   expense_prepare_and_execute(
     $con,
-    "SELECT ID, ExpenseDate, ExpenseItem, ExpenseCost, Currency, CategoryId FROM tblexpense WHERE ID=? AND UserId=? LIMIT 1",
+    "SELECT ID, ExpenseDate, ExpenseItem, ExpenseCost, Currency, CategoryId, Notes, ReceiptPath FROM tblexpense WHERE ID=? AND UserId=? LIMIT 1",
     'ii',
     array($editid, $userid)
   )
@@ -35,7 +36,8 @@ $form = array(
   'item' => $expense ? $expense['ExpenseItem'] : '',
   'costitem' => $expense ? $expense['ExpenseCost'] : '',
   'currency' => $expense ? expense_selected_currency($expense['Currency']) : 'USD',
-  'categoryid' => $expense && $expense['CategoryId'] ? (string)$expense['CategoryId'] : ''
+  'categoryid' => $expense && $expense['CategoryId'] ? (string)$expense['CategoryId'] : '',
+  'notes' => $expense ? $expense['Notes'] : ''
 );
 
 if ($expense && isset($_POST['submit'])) {
@@ -44,7 +46,9 @@ if ($expense && isset($_POST['submit'])) {
   $form['costitem'] = isset($_POST['costitem']) ? trim($_POST['costitem']) : '';
   $form['currency'] = expense_selected_currency(isset($_POST['currency']) ? $_POST['currency'] : 'USD');
   $form['categoryid'] = isset($_POST['categoryid']) ? trim($_POST['categoryid']) : '';
+  $form['notes'] = isset($_POST['notes']) ? trim($_POST['notes']) : '';
   $categoryId = (int)$form['categoryid'];
+  $removeReceipt = isset($_POST['remove_receipt']) ? 1 : 0;
 
   if (!expense_verify_csrf(isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '')) {
     $msg = 'Your session expired. Please try again.';
@@ -61,21 +65,39 @@ if ($expense && isset($_POST['submit'])) {
     if (!$category) {
       $msg = 'The selected category is invalid.';
     } else {
-      $cost = (float)$form['costitem'];
-      $stmt = expense_prepare_and_execute(
-        $con,
-        "UPDATE tblexpense SET ExpenseDate=?, ExpenseItem=?, ExpenseCost=?, Currency=?, CategoryId=? WHERE ID=? AND UserId=?",
-        'ssdsiii',
-        array($form['dateexpense'], $form['item'], $cost, $form['currency'], $categoryId, $editid, $userid)
-      );
-
-      if ($stmt) {
-        expense_close_statement($stmt);
-        header('Location: manage-expense.php?status=updated');
-        exit;
+      $receiptPath = $expense['ReceiptPath'];
+      if ($removeReceipt) {
+        expense_delete_receipt_file($receiptPath);
+        $receiptPath = '';
       }
 
-      $msg = 'Something went wrong. Please try again.';
+      $upload = expense_handle_receipt_upload(isset($_FILES['receipt']) ? $_FILES['receipt'] : array(), $userid);
+      if ($upload['error'] !== '') {
+        $msg = $upload['error'];
+      } elseif ($upload['path'] !== '') {
+        if (!empty($receiptPath)) {
+          expense_delete_receipt_file($receiptPath);
+        }
+        $receiptPath = $upload['path'];
+      }
+
+      if ($msg == '') {
+        $cost = (float)$form['costitem'];
+        $stmt = expense_prepare_and_execute(
+          $con,
+          "UPDATE tblexpense SET ExpenseDate=?, ExpenseItem=?, ExpenseCost=?, Currency=?, CategoryId=?, Notes=?, ReceiptPath=? WHERE ID=? AND UserId=?",
+          'ssdsissii',
+          array($form['dateexpense'], $form['item'], $cost, $form['currency'], $categoryId, $form['notes'], $receiptPath, $editid, $userid)
+        );
+
+        if ($stmt) {
+          expense_close_statement($stmt);
+          header('Location: manage-expense.php?status=updated');
+          exit;
+        }
+
+        $msg = 'Something went wrong. Please try again.';
+      }
     }
   }
 }
@@ -102,7 +124,7 @@ $currencyOptions = expense_currency_options();
     .expense-card { background: #fff; border: 1px solid #dbe4ee; border-radius: 18px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06); padding: 24px; }
     .page-title { margin: 0 0 6px; font-size: 28px; font-weight: 700; color: #0f172a; }
     .page-copy { margin: 0 0 22px; color: #64748b; }
-    .alert-inline { margin-bottom: 18px; }
+    .receipt-box { padding: 12px 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 14px; }
   </style>
 </head>
 <body>
@@ -120,14 +142,14 @@ $currencyOptions = expense_currency_options();
           </ol>
 
           <h1 class="page-title">Edit expense</h1>
-          <p class="page-copy">Update the item, budget category, amount, and currency.</p>
+          <p class="page-copy">Update the item, category, notes, receipt, amount, and currency.</p>
 
           <?php if ($msg != '') { ?>
-          <div class="alert alert-danger alert-inline"><?php echo expense_h($msg); ?></div>
+          <div class="alert alert-danger"><?php echo expense_h($msg); ?></div>
           <?php } ?>
 
           <?php if ($expense) { ?>
-          <form method="post" action="">
+          <form method="post" action="" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?php echo expense_h($csrfToken); ?>">
             <div class="row">
               <div class="col-md-6">
@@ -173,9 +195,31 @@ $currencyOptions = expense_currency_options();
               </div>
             </div>
 
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="costitem">Cost of Item</label>
+                  <input class="form-control" type="number" min="0.01" step="0.01" id="costitem" name="costitem" required value="<?php echo expense_h($form['costitem']); ?>">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="receipt">Replace Receipt</label>
+                  <input class="form-control" type="file" id="receipt" name="receipt" accept=".jpg,.jpeg,.png,.pdf">
+                </div>
+              </div>
+            </div>
+
+            <?php if (!empty($expense['ReceiptPath'])) { ?>
+            <div class="receipt-box">
+              <div><strong>Current receipt:</strong> <a href="<?php echo expense_h($expense['ReceiptPath']); ?>" target="_blank">Open receipt</a></div>
+              <label style="margin-top:8px;"><input type="checkbox" name="remove_receipt" value="1"> Remove current receipt</label>
+            </div>
+            <?php } ?>
+
             <div class="form-group">
-              <label for="costitem">Cost of Item</label>
-              <input class="form-control" type="number" min="0.01" step="0.01" id="costitem" name="costitem" required value="<?php echo expense_h($form['costitem']); ?>" placeholder="0.00">
+              <label for="notes">Notes</label>
+              <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="Optional details about this expense"><?php echo expense_h($form['notes']); ?></textarea>
             </div>
 
             <div class="form-group">

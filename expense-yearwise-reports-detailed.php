@@ -9,8 +9,8 @@ if (strlen($_SESSION['detsuid']==0)) {
   $userid = $_SESSION['detsuid'];
   $currency = report_selected_currency('currency');
   $msg = '';
-  $fromYear = isset($_POST['fromyear']) ? intval($_POST['fromyear']) : 0;
-  $toYear = isset($_POST['toyear']) ? intval($_POST['toyear']) : 0;
+  $fromYear = isset($_POST['fromyear']) ? intval($_POST['fromyear']) : (isset($_GET['fromyear']) ? intval($_GET['fromyear']) : 0);
+  $toYear = isset($_POST['toyear']) ? intval($_POST['toyear']) : (isset($_GET['toyear']) ? intval($_GET['toyear']) : 0);
   $rows = array();
   $labels = array();
   $values = array();
@@ -20,6 +20,7 @@ if (strlen($_SESSION['detsuid']==0)) {
   $topPeriodValue = 0;
   $fromDate = '';
   $toDate = '';
+  $exportLink = '';
 
   $currencyColumn = mysqli_query($con, "SHOW COLUMNS FROM tblexpense LIKE 'Currency'");
   if (mysqli_num_rows($currencyColumn) == 0) {
@@ -51,6 +52,30 @@ if (strlen($_SESSION['detsuid']==0)) {
         }
       }
     }
+
+    $exportLink = 'expense-yearwise-reports-detailed.php?' . http_build_query(array(
+      'fromyear' => $fromYear,
+      'toyear' => $toYear,
+      'currency' => $currency,
+      'export' => 'csv'
+    ));
+  }
+
+  if ($msg == '' && isset($_GET['export']) && $_GET['export'] === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=yearly-report-' . date('Ymd-His') . '.csv');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, array('Year', 'Total', 'Currency'));
+    foreach ($rows as $row) {
+      fputcsv($output, array(
+        $row['reportyear'],
+        number_format((float)$row['totalamount'], 2, '.', ''),
+        $currency
+      ));
+    }
+    fputcsv($output, array('Grand Total', number_format((float)$totalExpense, 2, '.', ''), $currency));
+    fclose($output);
+    exit;
   }
 ?>
 <!DOCTYPE html>
@@ -93,10 +118,11 @@ if (strlen($_SESSION['detsuid']==0)) {
   <div class="col-sm-9 col-sm-offset-3 col-lg-10 col-lg-offset-2 main report-shell">
     <div class="report-block">
       <h1 class="report-title">Yearly report</h1>
-      <p class="report-subtitle">Range: <strong><?php echo htmlentities((string)$fromYear); ?></strong> to <strong><?php echo htmlentities((string)$toYear); ?></strong> in <strong><?php echo $currency; ?></strong></p>
-      <a class="toolbar-link btn btn-default" href="expense-yearwise-reports.php?cur=<?php echo $currency; ?>">Change filters</a>
+      <p class="report-subtitle">Range: <strong><?php echo report_h((string)$fromYear); ?></strong> to <strong><?php echo report_h((string)$toYear); ?></strong> in <strong><?php echo report_h($currency); ?></strong></p>
+      <a class="toolbar-link btn btn-default" href="expense-yearwise-reports.php?cur=<?php echo report_h($currency); ?>">Change filters</a>
+      <?php if ($msg == '') { ?><a class="toolbar-link btn btn-primary" href="<?php echo report_h($exportLink); ?>">Export CSV</a><?php } ?>
       <?php if ($msg != '') { ?>
-      <div class="alert-lite"><?php echo $msg; ?></div>
+      <div class="alert-lite"><?php echo report_h($msg); ?></div>
       <?php } ?>
     </div>
 

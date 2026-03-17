@@ -11,16 +11,22 @@ if (strlen($_SESSION['detsuid']) == 0) {
 
 $userid = (int)$_SESSION['detsuid'];
 $currencyOptions = expense_currency_options();
-$selectedCurrency = expense_selected_currency(isset($_GET['cur']) ? $_GET['cur'] : 'USD');
 
 expense_ensure_schema($con);
 expense_ensure_user_categories($con, $userid);
+expense_process_recurring($con, $userid);
+$settings = expense_get_user_settings($con, $userid);
+$selectedCurrency = expense_selected_currency(isset($_GET['cur']) ? $_GET['cur'] : $settings['DefaultCurrency']);
 
 $today = date('Y-m-d');
 $yesterday = date('Y-m-d', strtotime('-1 day'));
 $weekStart = date('Y-m-d', strtotime('-6 days'));
+$previousWeekStart = date('Y-m-d', strtotime('-13 days'));
+$previousWeekEnd = date('Y-m-d', strtotime('-7 days'));
 $monthStart = date('Y-m-01');
 $monthEnd = date('Y-m-t');
+$previousMonthStart = date('Y-m-01', strtotime('-1 month'));
+$previousMonthEnd = date('Y-m-t', strtotime('-1 month'));
 $yearStart = date('Y-01-01');
 $selectedMonthLabel = date('F Y', strtotime($monthStart));
 
@@ -29,10 +35,23 @@ function dashboard_scalar($con, $sql, $types, $params, $field) {
   return $row && isset($row[$field]) ? (float)$row[$field] : 0;
 }
 
+function dashboard_change_text($current, $previous) {
+  if ((float)$previous <= 0) {
+    return (float)$current > 0 ? 'New activity' : 'No change';
+  }
+
+  $percent = (($current - $previous) / $previous) * 100;
+  $prefix = $percent >= 0 ? '+' : '';
+
+  return $prefix . number_format($percent, 0) . '%';
+}
+
 $sum_today_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate=?", 'iss', array($userid, $selectedCurrency, $today), 'total');
 $sum_yesterday_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate=?", 'iss', array($userid, $selectedCurrency, $yesterday), 'total');
 $sum_weekly_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate BETWEEN ? AND ?", 'isss', array($userid, $selectedCurrency, $weekStart, $today), 'total');
+$sum_previous_week_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate BETWEEN ? AND ?", 'isss', array($userid, $selectedCurrency, $previousWeekStart, $previousWeekEnd), 'total');
 $sum_monthly_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate BETWEEN ? AND ?", 'isss', array($userid, $selectedCurrency, $monthStart, $monthEnd), 'total');
+$sum_previous_month_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate BETWEEN ? AND ?", 'isss', array($userid, $selectedCurrency, $previousMonthStart, $previousMonthEnd), 'total');
 $sum_yearly_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate BETWEEN ? AND ?", 'isss', array($userid, $selectedCurrency, $yearStart, $today), 'total');
 $sum_total_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=?", 'is', array($userid, $selectedCurrency), 'total');
 
@@ -178,6 +197,8 @@ foreach ($budgetRows as $index => $budgetRow) {
 }
 $budgetRemaining = $budgetTotal - $budgetSpent;
 $budgetProgress = expense_budget_progress($budgetSpent, $budgetTotal);
+$weeklyChangeText = dashboard_change_text($sum_weekly_expense, $sum_previous_week_expense);
+$monthlyChangeText = dashboard_change_text($sum_monthly_expense, $sum_previous_month_expense);
 ?>
 <!DOCTYPE html>
 <html>
@@ -356,6 +377,14 @@ $budgetProgress = expense_budget_progress($budgetSpent, $budgetTotal);
             <div class="quick-stat">
               <span>Avg / Active Day</span>
               <strong><?php echo expense_h(expense_money($avgPerActiveDay, $selectedCurrency)); ?></strong>
+            </div>
+            <div class="quick-stat">
+              <span>Vs Last Week</span>
+              <strong><?php echo expense_h($weeklyChangeText); ?></strong>
+            </div>
+            <div class="quick-stat">
+              <span>Vs Last Month</span>
+              <strong><?php echo expense_h($monthlyChangeText); ?></strong>
             </div>
           </div>
         </div>

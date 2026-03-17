@@ -16,6 +16,7 @@ $currencyOptions = expense_currency_options();
 
 expense_ensure_schema($con);
 expense_ensure_user_categories($con, $userid);
+expense_process_recurring($con, $userid);
 $csrfToken = expense_csrf_token();
 
 if (isset($_GET['status'])) {
@@ -35,9 +36,21 @@ if (isset($_POST['delete_expense'])) {
   } elseif ($deleteId <= 0) {
     $msg = 'Invalid expense selected.';
   } else {
+    $expenseToDelete = expense_fetch_one_assoc(
+      expense_prepare_and_execute(
+        $con,
+        "SELECT ReceiptPath FROM tblexpense WHERE ID=? AND UserId=? LIMIT 1",
+        'ii',
+        array($deleteId, $userid)
+      )
+    );
+
     $stmt = expense_prepare_and_execute($con, "DELETE FROM tblexpense WHERE ID=? AND UserId=?", 'ii', array($deleteId, $userid));
     if ($stmt) {
       expense_close_statement($stmt);
+      if ($expenseToDelete && !empty($expenseToDelete['ReceiptPath'])) {
+        expense_delete_receipt_file($expenseToDelete['ReceiptPath']);
+      }
       header('Location: manage-expense.php?status=deleted');
       exit;
     }
@@ -50,12 +63,14 @@ $filters = array(
   'currency' => isset($_GET['currency']) && $_GET['currency'] !== '' ? expense_selected_currency($_GET['currency']) : '',
   'categoryid' => isset($_GET['categoryid']) ? (int)$_GET['categoryid'] : 0,
   'fromdate' => isset($_GET['fromdate']) ? trim($_GET['fromdate']) : '',
-  'todate' => isset($_GET['todate']) ? trim($_GET['todate']) : ''
+  'todate' => isset($_GET['todate']) ? trim($_GET['todate']) : '',
+  'minamount' => isset($_GET['minamount']) ? trim($_GET['minamount']) : '',
+  'maxamount' => isset($_GET['maxamount']) ? trim($_GET['maxamount']) : ''
 );
 
 $categories = expense_get_categories($con, $userid);
 
-$sql = "SELECT e.ID, e.ExpenseItem, e.ExpenseCost, e.ExpenseDate, e.Currency, e.CategoryId, c.CategoryName
+$sql = "SELECT e.ID, e.ExpenseItem, e.ExpenseCost, e.ExpenseDate, e.Currency, e.CategoryId, e.Notes, e.ReceiptPath, c.CategoryName
         FROM tblexpense e
         LEFT JOIN tblcategories c ON c.ID=e.CategoryId AND c.UserId=e.UserId
         WHERE e.UserId=?";
@@ -63,8 +78,9 @@ $types = 'i';
 $params = array($userid);
 
 if ($filters['q'] !== '') {
-  $sql .= " AND e.ExpenseItem LIKE ?";
-  $types .= 's';
+  $sql .= " AND (e.ExpenseItem LIKE ? OR e.Notes LIKE ?)";
+  $types .= 'ss';
+  $params[] = '%' . $filters['q'] . '%';
   $params[] = '%' . $filters['q'] . '%';
 }
 if ($filters['currency'] !== '') {
@@ -87,9 +103,40 @@ if ($filters['todate'] !== '' && strtotime($filters['todate'])) {
   $types .= 's';
   $params[] = $filters['todate'];
 }
+if ($filters['minamount'] !== '' && is_numeric($filters['minamount'])) {
+  $sql .= " AND e.ExpenseCost>=?";
+  $types .= 'd';
+  $params[] = (float)$filters['minamount'];
+}
+if ($filters['maxamount'] !== '' && is_numeric($filters['maxamount'])) {
+  $sql .= " AND e.ExpenseCost<=?";
+  $types .= 'd';
+  $params[] = (float)$filters['maxamount'];
+}
 
 $sql .= " ORDER BY e.ExpenseDate DESC, e.ID DESC";
 $rows = expense_fetch_all_assoc(expense_prepare_and_execute($con, $sql, $types, $params));
+
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+  header('Content-Type: text/csv; charset=utf-8');
+  header('Content-Disposition: attachment; filename=expenses-' . date('Ymd-His') . '.csv');
+  $output = fopen('php://output', 'w');
+  fputcsv($output, array('Date', 'Item', 'Category', 'Amount', 'Currency', 'Notes', 'Receipt'));
+  foreach ($rows as $row) {
+    fputcsv($output, array(
+      $row['ExpenseDate'],
+      $row['ExpenseItem'],
+      $row['CategoryName'] ? $row['CategoryName'] : 'Uncategorized',
+      number_format((float)$row['ExpenseCost'], 2, '.', ''),
+      $row['Currency'],
+      preg_replace('/\s+/', ' ', trim((string)$row['Notes'])),
+      $row['ReceiptPath']
+    ));
+  }
+  fclose($output);
+  exit;
+}
+
 $totalRows = count($rows);
 $filteredTotal = 0;
 foreach ($rows as $row) {
@@ -98,6 +145,10 @@ foreach ($rows as $row) {
 $summaryText = $filters['currency'] !== ''
   ? expense_money($filteredTotal, $filters['currency'])
   : number_format($filteredTotal, 2) . ' (mixed currencies)';
+
+$queryString = $_GET;
+$queryString['export'] = 'csv';
+$exportLink = 'manage-expense.php?' . http_build_query($queryString);
 ?>
 <!DOCTYPE html>
 <html>
@@ -120,6 +171,7 @@ $summaryText = $filters['currency'] !== ''
     .table-clean > thead > tr > th, .table-clean > tbody > tr > td { padding: 14px 12px; border-top: 1px solid #e2e8f0; vertical-align: middle; }
     .table-clean > thead > tr > th { border-top: 0; color: #64748b; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
     .category-pill { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 12px; font-weight: 700; }
+    .note-preview { color: #475569; max-width: 260px; white-space: normal; }
     .empty-state { padding: 36px 16px; text-align: center; color: #64748b; }
     .inline-form { display: inline; }
   </style>
@@ -140,10 +192,11 @@ $summaryText = $filters['currency'] !== ''
           <div class="row">
             <div class="col-md-8">
               <h1 class="page-title">Manage expenses</h1>
-              <p class="page-copy">Search, filter, and review every expense with category and currency details.</p>
+              <p class="page-copy">Search, filter, export, and review every expense with category, notes, and receipt details.</p>
             </div>
             <div class="col-md-4 text-right">
               <a href="add-expense.php" class="btn btn-primary">Add Expense</a>
+              <a href="<?php echo expense_h($exportLink); ?>" class="btn btn-default">Export CSV</a>
             </div>
           </div>
 
@@ -158,7 +211,7 @@ $summaryText = $filters['currency'] !== ''
             <div class="row">
               <div class="col-md-3">
                 <div class="form-group">
-                  <label for="q">Search Item</label>
+                  <label for="q">Search Item / Notes</label>
                   <input class="form-control" type="text" id="q" name="q" value="<?php echo expense_h($filters['q']); ?>" placeholder="Groceries">
                 </div>
               </div>
@@ -197,11 +250,29 @@ $summaryText = $filters['currency'] !== ''
                 </div>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary">Apply Filters</button>
-            <a href="manage-expense.php" class="btn btn-default">Reset</a>
+            <div class="row">
+              <div class="col-md-2">
+                <div class="form-group">
+                  <label for="minamount">Min Amount</label>
+                  <input class="form-control" type="number" min="0" step="0.01" id="minamount" name="minamount" value="<?php echo expense_h($filters['minamount']); ?>">
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="form-group">
+                  <label for="maxamount">Max Amount</label>
+                  <input class="form-control" type="number" min="0" step="0.01" id="maxamount" name="maxamount" value="<?php echo expense_h($filters['maxamount']); ?>">
+                </div>
+              </div>
+              <div class="col-md-8">
+                <div class="form-group" style="margin-top:25px;">
+                  <button type="submit" class="btn btn-primary">Apply Filters</button>
+                  <a href="manage-expense.php" class="btn btn-default">Reset</a>
+                </div>
+              </div>
+            </div>
           </form>
 
-          <div class="summary-chip"><?php echo $totalRows; ?> records • <?php echo expense_h($summaryText); ?></div>
+          <div class="summary-chip"><?php echo $totalRows; ?> records | <?php echo expense_h($summaryText); ?></div>
 
           <div class="table-responsive" style="margin-top:22px;">
             <table class="table table-clean">
@@ -212,6 +283,8 @@ $summaryText = $filters['currency'] !== ''
                   <th>Category</th>
                   <th>Expense Cost</th>
                   <th>Expense Date</th>
+                  <th>Notes</th>
+                  <th>Receipt</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -223,6 +296,8 @@ $summaryText = $filters['currency'] !== ''
                   <td><span class="category-pill"><?php echo expense_h($row['CategoryName'] ? $row['CategoryName'] : 'Uncategorized'); ?></span></td>
                   <td><?php echo expense_h(expense_money($row['ExpenseCost'], $row['Currency'] ? $row['Currency'] : 'USD')); ?></td>
                   <td><?php echo expense_h(date('F j, Y', strtotime($row['ExpenseDate']))); ?></td>
+                  <td class="note-preview"><?php echo $row['Notes'] !== '' ? expense_h($row['Notes']) : '-'; ?></td>
+                  <td><?php if (!empty($row['ReceiptPath'])) { ?><a href="<?php echo expense_h($row['ReceiptPath']); ?>" target="_blank">Open</a><?php } else { echo '-'; } ?></td>
                   <td>
                     <a class="btn btn-xs btn-primary" href="edit-expense.php?editid=<?php echo (int)$row['ID']; ?>"><em class="fa fa-pencil"></em> Edit</a>
                     <form method="post" action="" class="inline-form" onsubmit="return confirm('Delete this expense?');">
@@ -234,7 +309,7 @@ $summaryText = $filters['currency'] !== ''
                 </tr>
                 <?php $cnt++; } } else { ?>
                 <tr>
-                  <td colspan="6" class="empty-state">No expenses matched your filters.</td>
+                  <td colspan="8" class="empty-state">No expenses matched your filters.</td>
                 </tr>
                 <?php } ?>
               </tbody>
