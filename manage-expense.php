@@ -62,6 +62,7 @@ $filters = array(
   'q' => isset($_GET['q']) ? trim($_GET['q']) : '',
   'currency' => isset($_GET['currency']) && $_GET['currency'] !== '' ? expense_selected_currency($_GET['currency']) : '',
   'categoryid' => isset($_GET['categoryid']) ? (int)$_GET['categoryid'] : 0,
+  'window' => isset($_GET['window']) && $_GET['window'] === 'last24h' ? 'last24h' : '',
   'fromdate' => isset($_GET['fromdate']) ? trim($_GET['fromdate']) : '',
   'todate' => isset($_GET['todate']) ? trim($_GET['todate']) : '',
   'minamount' => isset($_GET['minamount']) ? trim($_GET['minamount']) : '',
@@ -70,7 +71,7 @@ $filters = array(
 
 $categories = expense_get_categories($con, $userid);
 
-$sql = "SELECT e.ID, e.ExpenseItem, e.ExpenseCost, e.ExpenseDate, e.Currency, e.CategoryId, e.Notes, e.ReceiptPath, c.CategoryName
+$sql = "SELECT e.ID, e.ExpenseItem, e.ExpenseCost, e.ExpenseDate, e.Currency, e.CategoryId, e.Notes, e.ReceiptPath, e.CreatedAt, c.CategoryName
         FROM tblexpense e
         LEFT JOIN tblcategories c ON c.ID=e.CategoryId AND c.UserId=e.UserId
         WHERE e.UserId=?";
@@ -93,6 +94,9 @@ if ($filters['categoryid'] > 0) {
   $types .= 'i';
   $params[] = $filters['categoryid'];
 }
+if ($filters['window'] === 'last24h') {
+  $sql .= " AND e.CreatedAt BETWEEN DATE_SUB(NOW(), INTERVAL 24 HOUR) AND NOW()";
+}
 if ($filters['fromdate'] !== '' && strtotime($filters['fromdate'])) {
   $sql .= " AND e.ExpenseDate>=?";
   $types .= 's';
@@ -114,17 +118,18 @@ if ($filters['maxamount'] !== '' && is_numeric($filters['maxamount'])) {
   $params[] = (float)$filters['maxamount'];
 }
 
-$sql .= " ORDER BY e.ExpenseDate DESC, e.ID DESC";
+$sql .= " ORDER BY e.CreatedAt DESC, e.ID DESC";
 $rows = expense_fetch_all_assoc(expense_prepare_and_execute($con, $sql, $types, $params));
 
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename=expenses-' . date('Ymd-His') . '.csv');
   $output = fopen('php://output', 'w');
-  fputcsv($output, array('Date', 'Item', 'Category', 'Amount', 'Currency', 'Notes', 'Receipt'));
+  fputcsv($output, array('Date', 'Recorded At', 'Item', 'Category', 'Amount', 'Currency', 'Notes', 'Receipt'));
   foreach ($rows as $row) {
     fputcsv($output, array(
       $row['ExpenseDate'],
+      $row['CreatedAt'],
       $row['ExpenseItem'],
       $row['CategoryName'] ? $row['CategoryName'] : 'Uncategorized',
       number_format((float)$row['ExpenseCost'], 2, '.', ''),
@@ -145,6 +150,10 @@ foreach ($rows as $row) {
 $summaryText = $filters['currency'] !== ''
   ? expense_money($filteredTotal, $filters['currency'])
   : number_format($filteredTotal, 2) . ' (mixed currencies)';
+$summaryParts = array($totalRows . ' records', $summaryText);
+if ($filters['window'] === 'last24h') {
+  $summaryParts[] = 'created in the last 24 hours';
+}
 
 $queryString = $_GET;
 $queryString['export'] = 'csv';
@@ -174,6 +183,7 @@ $exportLink = 'manage-expense.php?' . http_build_query($queryString);
     .note-preview { color: #475569; max-width: 260px; white-space: normal; }
     .empty-state { padding: 36px 16px; text-align: center; color: #64748b; }
     .inline-form { display: inline; }
+    .date-meta { display: block; margin-top: 4px; color: #64748b; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -239,18 +249,27 @@ $exportLink = 'manage-expense.php?' . http_build_query($queryString);
               </div>
               <div class="col-md-2">
                 <div class="form-group">
+                  <label for="window">Time Window</label>
+                  <select class="form-control" id="window" name="window">
+                    <option value="">Any time</option>
+                    <option value="last24h" <?php if ($filters['window'] === 'last24h') { echo 'selected'; } ?>>Last 24 hours</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="form-group">
                   <label for="fromdate">From</label>
                   <input class="form-control" type="date" id="fromdate" name="fromdate" value="<?php echo expense_h($filters['fromdate']); ?>">
                 </div>
               </div>
+            </div>
+            <div class="row">
               <div class="col-md-2">
                 <div class="form-group">
                   <label for="todate">To</label>
                   <input class="form-control" type="date" id="todate" name="todate" value="<?php echo expense_h($filters['todate']); ?>">
                 </div>
               </div>
-            </div>
-            <div class="row">
               <div class="col-md-2">
                 <div class="form-group">
                   <label for="minamount">Min Amount</label>
@@ -263,7 +282,7 @@ $exportLink = 'manage-expense.php?' . http_build_query($queryString);
                   <input class="form-control" type="number" min="0" step="0.01" id="maxamount" name="maxamount" value="<?php echo expense_h($filters['maxamount']); ?>">
                 </div>
               </div>
-              <div class="col-md-8">
+              <div class="col-md-6">
                 <div class="form-group" style="margin-top:25px;">
                   <button type="submit" class="btn btn-primary">Apply Filters</button>
                   <a href="manage-expense.php" class="btn btn-default">Reset</a>
@@ -272,7 +291,7 @@ $exportLink = 'manage-expense.php?' . http_build_query($queryString);
             </div>
           </form>
 
-          <div class="summary-chip"><?php echo $totalRows; ?> records | <?php echo expense_h($summaryText); ?></div>
+          <div class="summary-chip"><?php echo expense_h(implode(' | ', $summaryParts)); ?></div>
 
           <div class="table-responsive" style="margin-top:22px;">
             <table class="table table-clean">
@@ -295,7 +314,12 @@ $exportLink = 'manage-expense.php?' . http_build_query($queryString);
                   <td><?php echo expense_h($row['ExpenseItem']); ?></td>
                   <td><span class="category-pill"><?php echo expense_h($row['CategoryName'] ? $row['CategoryName'] : 'Uncategorized'); ?></span></td>
                   <td><?php echo expense_h(expense_money($row['ExpenseCost'], $row['Currency'] ? $row['Currency'] : 'USD')); ?></td>
-                  <td><?php echo expense_h(date('F j, Y', strtotime($row['ExpenseDate']))); ?></td>
+                  <td>
+                    <?php echo expense_h(date('F j, Y', strtotime($row['ExpenseDate']))); ?>
+                    <?php if (!empty($row['CreatedAt'])) { ?>
+                    <span class="date-meta">Recorded <?php echo expense_h(date('g:i A', strtotime($row['CreatedAt']))); ?></span>
+                    <?php } ?>
+                  </td>
                   <td class="note-preview"><?php echo $row['Notes'] !== '' ? expense_h($row['Notes']) : '-'; ?></td>
                   <td><?php if (!empty($row['ReceiptPath'])) { ?><a href="<?php echo expense_h($row['ReceiptPath']); ?>" target="_blank">Open</a><?php } else { echo '-'; } ?></td>
                   <td>

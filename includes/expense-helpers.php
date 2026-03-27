@@ -164,6 +164,13 @@ if (!function_exists('expense_ensure_schema')) {
       mysqli_query($con, "ALTER TABLE tblexpense ADD COLUMN ReceiptPath varchar(255) DEFAULT NULL AFTER Notes");
     }
 
+    $createdAtColumn = mysqli_query($con, "SHOW COLUMNS FROM tblexpense LIKE 'CreatedAt'");
+    if ($createdAtColumn && mysqli_num_rows($createdAtColumn) == 0) {
+      mysqli_query($con, "ALTER TABLE tblexpense ADD COLUMN CreatedAt timestamp NULL DEFAULT NULL AFTER ReceiptPath");
+      mysqli_query($con, "UPDATE tblexpense SET CreatedAt = CASE WHEN ExpenseDate IS NOT NULL THEN CONCAT(ExpenseDate, ' 00:00:00') ELSE NOW() END WHERE CreatedAt IS NULL");
+      mysqli_query($con, "ALTER TABLE tblexpense MODIFY CreatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    }
+
     mysqli_query($con, "CREATE TABLE IF NOT EXISTS tblitems (
       ID int(11) NOT NULL AUTO_INCREMENT,
       UserId int(11) NOT NULL,

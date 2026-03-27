@@ -29,6 +29,7 @@ $previousMonthStart = date('Y-m-01', strtotime('-1 month'));
 $previousMonthEnd = date('Y-m-t', strtotime('-1 month'));
 $yearStart = date('Y-01-01');
 $selectedMonthLabel = date('F Y', strtotime($monthStart));
+$last24HoursLabel = date('M j, g:i A', strtotime('-24 hours')) . ' - ' . date('M j, g:i A');
 
 function dashboard_scalar($con, $sql, $types, $params, $field) {
   $row = expense_fetch_one_assoc(expense_prepare_and_execute($con, $sql, $types, $params));
@@ -46,6 +47,7 @@ function dashboard_change_text($current, $previous) {
   return $prefix . number_format($percent, 0) . '%';
 }
 
+$sum_last_24_hours_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND CreatedAt BETWEEN DATE_SUB(NOW(), INTERVAL 24 HOUR) AND NOW()", 'is', array($userid, $selectedCurrency), 'total');
 $sum_today_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate=?", 'iss', array($userid, $selectedCurrency, $today), 'total');
 $sum_yesterday_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate=?", 'iss', array($userid, $selectedCurrency, $yesterday), 'total');
 $sum_weekly_expense = dashboard_scalar($con, "SELECT SUM(ExpenseCost) AS total FROM tblexpense WHERE UserId=? AND Currency=? AND ExpenseDate BETWEEN ? AND ?", 'isss', array($userid, $selectedCurrency, $weekStart, $today), 'total');
@@ -137,11 +139,11 @@ $avgPerActiveDay = $activeDays > 0 ? ($sum_monthly_expense / $activeDays) : 0;
 $latestExpense = expense_fetch_one_assoc(
   expense_prepare_and_execute(
     $con,
-    "SELECT e.ExpenseItem, e.ExpenseCost, e.ExpenseDate, COALESCE(c.CategoryName, 'Uncategorized') AS CategoryName
+    "SELECT e.ExpenseItem, e.ExpenseCost, e.ExpenseDate, e.CreatedAt, COALESCE(c.CategoryName, 'Uncategorized') AS CategoryName
      FROM tblexpense e
      LEFT JOIN tblcategories c ON c.ID=e.CategoryId AND c.UserId=e.UserId
      WHERE e.UserId=? AND e.Currency=?
-     ORDER BY e.ExpenseDate DESC, e.ID DESC
+     ORDER BY e.CreatedAt DESC, e.ID DESC
      LIMIT 1",
     'is',
     array($userid, $selectedCurrency)
@@ -319,9 +321,9 @@ $monthlyChangeText = dashboard_change_text($sum_monthly_expense, $sum_previous_m
     <div class="row">
       <div class="col-sm-6 col-lg-3">
         <div class="dashboard-card metric-card">
-          <p class="metric-label">Today</p>
-          <h3 class="metric-value"><?php echo expense_h(expense_money($sum_today_expense, $selectedCurrency)); ?></h3>
-          <p class="metric-note">Spent on <?php echo expense_h(date('F j, Y')); ?></p>
+          <p class="metric-label">Last 24 Hours</p>
+          <h3 class="metric-value"><?php echo expense_h(expense_money($sum_last_24_hours_expense, $selectedCurrency)); ?></h3>
+          <p class="metric-note"><?php echo expense_h($last24HoursLabel); ?></p>
         </div>
       </div>
       <div class="col-sm-6 col-lg-3">
@@ -363,6 +365,10 @@ $monthlyChangeText = dashboard_change_text($sum_monthly_expense, $sum_previous_m
           <p class="section-copy">Signals that help you read the month faster.</p>
           <div class="quick-grid">
             <div class="quick-stat">
+              <span>Today</span>
+              <strong><?php echo expense_h(expense_money($sum_today_expense, $selectedCurrency)); ?></strong>
+            </div>
+            <div class="quick-stat">
               <span>Yesterday</span>
               <strong><?php echo expense_h(expense_money($sum_yesterday_expense, $selectedCurrency)); ?></strong>
             </div>
@@ -398,6 +404,9 @@ $monthlyChangeText = dashboard_change_text($sum_monthly_expense, $sum_previous_m
             <p class="item-meta"><?php echo expense_h(expense_money($latestExpense['ExpenseCost'], $selectedCurrency)); ?></p>
             <p class="item-category"><?php echo expense_h($latestExpense['CategoryName']); ?></p>
             <p class="item-date"><?php echo expense_h(date('F j, Y', strtotime($latestExpense['ExpenseDate']))); ?></p>
+            <?php if (!empty($latestExpense['CreatedAt'])) { ?>
+            <p class="item-date">Recorded at <?php echo expense_h(date('g:i A', strtotime($latestExpense['CreatedAt']))); ?></p>
+            <?php } ?>
             <?php } else { ?>
             <p class="item-name">No expenses yet</p>
             <p class="item-meta">Add your first expense to start tracking.</p>
