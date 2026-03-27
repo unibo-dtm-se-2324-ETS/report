@@ -3,7 +3,6 @@ title: Home
 nav_order: 1
 ---
 <div id="top"></div>
-
 <div class="report-sidebar">
   <div class="report-sidebar-title">Contents</div>
   <a href="#top">Home</a>
@@ -24,13 +23,9 @@ nav_order: 1
 </div>
 
 <style>
-html {
-  scroll-behavior: smooth;
-}
-#top {
-  position: relative;
-  top: -12px;
-}
+html { scroll-behavior: smooth; }
+.side-bar { display: none !important; }
+.main { margin-left: 0 !important; max-width: none !important; }
 .report-sidebar {
   position: fixed;
   left: 1.5rem;
@@ -43,7 +38,7 @@ html {
   border-radius: 12px;
   background: #f8fafc;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
-  z-index: 10;
+  z-index: 20;
 }
 .report-sidebar-title {
   font-weight: 700;
@@ -57,13 +52,9 @@ html {
   text-decoration: none;
   font-size: .95rem;
 }
-.report-sidebar a:hover {
-  text-decoration: underline;
-}
-.main-content-wrap {
-  margin-left: 270px;
-}
-.main-content img {
+.report-sidebar a:hover { text-decoration: underline; }
+.report-content { margin-left: 270px; }
+.report-content img {
   border: 1px solid #dbe4ee;
   border-radius: 12px;
   margin: .75rem 0 1.5rem;
@@ -73,13 +64,14 @@ html {
     position: static;
     width: auto;
     max-height: none;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }
-  .main-content-wrap {
-    margin-left: 0;
-  }
+  .report-content { margin-left: 0; }
 }
 </style>
+
+<div class="report-content">
+
 # Expense Tracker System
 
 ## Home
@@ -446,7 +438,7 @@ The repository does not show an implemented CI/CD pipeline. There are no visible
 This screen allows a new user to create an account by entering full name, email address, mobile number, password, and repeated password. It is the entry point for new users who want to access the expense tracking features of the system.
 
 ### Figure 2. Dashboard Page
-The dashboard gives a summarized overview of user spending. It presents key metrics such as today’s expenses, last 7 days, current month, and total expense. It also includes charts and quick statistics to help the user understand spending behavior visually.
+The dashboard gives a summarized overview of user spending. It presents key metrics such as today's expenses, last 7 days, current month, and total expense. It also includes charts and quick statistics to help the user understand spending behavior visually.
 
 ### Figure 3. Add Expense Page
 This page is used to record a new expense. The user can select the date, currency, item, category, cost, notes, and upload a receipt file. It is one of the core input pages of the application.
@@ -555,4 +547,6 @@ This project demonstrates that software engineering is not only about making fea
 
 ## Conclusion
 The Expense Tracker System is a strong university software engineering project because it addresses a practical problem and delivers a complete web-based solution with several useful modules. The system goes beyond basic data entry by including reporting, budgeting, recurring expenses, receipt management, and visual analytics. From a software engineering perspective, the project demonstrates requirements handling, modular design, database modeling, user-centered functionality, and iterative improvement. At the same time, it reveals valuable improvement opportunities in security, testing, and deployment automation. Overall, the project is functional, relevant, and suitable as an academic case study in web application engineering.
+</div>
+
 
