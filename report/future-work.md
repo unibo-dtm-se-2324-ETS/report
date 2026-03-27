@@ -3,15 +3,9 @@ title: Future work
 nav_order: 14
 ---
 
-# Future Work
+<meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#future-work">
+<script>
+window.location.replace("{{ '/' | relative_url }}#future-work");
+</script>
 
-- Replace MD5 password hashing with `password_hash()` and `password_verify()`.
-- Refactor all remaining direct SQL queries to prepared statements.
-- Add role-based access control or admin monitoring if the system grows.
-- Add automated tests for critical business flows.
-- Introduce proper database migration scripts.
-- Add pagination for large expense datasets.
-- Add charts for category trends over time.
-- Support PDF report export in addition to CSV.
-- Add email-based password recovery.
-- Build a REST API or mobile app version in the future.
+If you are not redirected automatically, <a href="{{ '/' | relative_url }}#future-work">open the Future work section</a>.
