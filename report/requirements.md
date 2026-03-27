@@ -1,6 +1,7 @@
 ---
 title: Requirements
 nav_order: 3
+permalink: /requirements.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#requirements">

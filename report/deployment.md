@@ -1,6 +1,7 @@
 ---
 title: Deployment
 nav_order: 8
+permalink: /deployment.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#deployment">

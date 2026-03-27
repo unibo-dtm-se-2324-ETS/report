@@ -1,6 +1,7 @@
 ---
 title: CI/CD
 nav_order: 9
+permalink: /ci-cd.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#ci-cd">

@@ -1,6 +1,7 @@
 ---
 title: Validation
 nav_order: 6
+permalink: /validation.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#validation">

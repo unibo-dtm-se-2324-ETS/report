@@ -1,6 +1,7 @@
 ---
 title: Conclusion
 nav_order: 15
+permalink: /conclusion.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#conclusion">

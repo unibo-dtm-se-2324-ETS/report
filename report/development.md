@@ -1,6 +1,7 @@
 ---
 title: Development
 nav_order: 5
+permalink: /development.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#development">

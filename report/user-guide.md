@@ -1,6 +1,7 @@
 ---
 title: User guide
 nav_order: 10
+permalink: /user-guide.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#user-guide">

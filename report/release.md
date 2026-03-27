@@ -1,6 +1,7 @@
 ---
 title: Release
 nav_order: 7
+permalink: /release.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#release">

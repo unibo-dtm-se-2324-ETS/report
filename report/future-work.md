@@ -1,6 +1,7 @@
 ---
 title: Future work
 nav_order: 14
+permalink: /future-work.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#future-work">

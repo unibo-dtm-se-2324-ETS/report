@@ -1,6 +1,7 @@
 ---
 title: Design
 nav_order: 4
+permalink: /design.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#design">

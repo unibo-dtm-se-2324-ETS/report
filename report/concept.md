@@ -1,6 +1,7 @@
 ---
 title: Concept
 nav_order: 2
+permalink: /concept.html
 ---
 
 <meta http-equiv="refresh" content="0; url={{ '/' | relative_url }}#concept">
