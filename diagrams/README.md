@@ -9,10 +9,3 @@ Recommended files:
 - `er-diagram.png`
 - `activity-diagram-add-expense.png`
 
-Suggested tools:
-
-- draw.io
-- Lucidchart
-- Visio
-
-You can reference these files from the report pages after exporting them as PNG or JPG.
