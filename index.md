@@ -29,7 +29,7 @@ The project is split across two repositories, so that the software and its docum
 
 ## Declaration on the use of AI tools
 
-Parts of this project were produced with the help of an AI coding assistant (Anthropic's Claude, used through Claude Code). This is disclosed here because the assistance is also visible in the repository: the commits it contributed to carry a `Co-Authored-By: Claude` trailer, which is why the name appears in the artifact repository's contributor list. Ten commits in the history are marked this way.
+Parts of this project were produced with the help of an AI coding assistant (Anthropic's Claude, used through Claude Code). Eleven commits in the artifact repository and three in this one were made with its assistance.
 
 The assistant was used for three kinds of work:
 
@@ -37,4 +37,4 @@ The assistant was used for three kinds of work:
 - **Parts of the application.** The dashboard metric cards and their later refactoring, the category breakdown, average-per-period figure, and print option added to the detailed report pages, and the demonstration seed data.
 - **Repository configuration.** Adjustments to the GitHub Actions workflow triggers and to the report site configuration.
 
-The remainder of the history, which is the larger part of it, is recorded under the author's name alone. Every AI-assisted change was read and tested before being committed, and the author is responsible for the content of this report and for the behaviour of the software it describes.
+The remainder of the work, which is the larger part of it, was done by the author without such assistance. Every AI-assisted change was read and tested before being committed, and the author is responsible for the content of this report and for the behaviour of the software it describes.
