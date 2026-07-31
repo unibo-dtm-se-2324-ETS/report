@@ -1,51 +1,92 @@
 ---
 title: Validation
+has_children: false
 nav_order: 6
 ---
 
 # Validation
 
-## Testing Approach
+## Testing
 
-The repository does not include a full automated test suite for application behavior, so validation is mainly manual. Even so, manual testing can be structured around the most important user workflows and output checks.
+For the validation of the Expense Tracker System, a combination of testing approaches was used, because the project is a PHP and MySQL web application whose behaviour spans reusable functions, individual pages, and full browser workflows.
 
-## Sample Test Cases
+- Type of tests conducted:
+    - *Unit tests* on the reusable helper functions, using **PHPUnit**.
+    - *Syntax smoke tests* that run PHP's built-in linter (`php -l`) against every application page and helper.
+    - *End-to-end browser tests* that drive the running site as a real user, using **Playwright** through Python and a Chromium browser.
+    - *Manual acceptance testing* of the main workflows against a checklist.
+- Testing framework: PHPUnit for the unit and syntax tests, and Playwright for the browser end-to-end test. The test files live under `tests/unit/` and `tests/e2e/`, and the manual checklist is stored in `tests/acceptance-checklist.md`.
 
-| Test Case | Input | Expected Result |
-| --- | --- | --- |
-| User registration | Valid name, email, mobile number, password | New user account is created |
-| Login | Correct email and password | User is redirected to dashboard |
-| Add expense | Valid date, item, category, amount | Expense is saved successfully |
-| Edit expense | Updated amount or category | Existing expense data is updated |
-| Delete expense | Existing expense selected | Expense is removed from the list |
-| Add category | Unique category name | Category is stored successfully |
-| Save budget | Category, month, amount | Budget appears in category and dashboard views |
-| Add recurring expense | Weekly or monthly schedule | Future due expense is auto-generated |
-| Generate report | Valid date or month range | Report summary and charts are displayed |
-| Export CSV | Export action on filtered expenses | CSV file downloads correctly |
+The unit and syntax tests are run with a single command through Composer:
 
-## Validation Results
+```powershell
+composer test
+```
 
-Based on inspection of the codebase and implemented pages, the system supports the main workflow successfully:
+### Success rate
 
-- User authentication features are present.
-- Expense CRUD operations are implemented.
-- Filtering and CSV export are implemented.
-- Categories and budgets are integrated with the dashboard.
-- Recurring expense automation is implemented.
-- Reporting is available in date-wise, month-wise, and year-wise formats.
+The automated PHPUnit suite currently reports:
 
-## Quality Observations
+```text
+OK (44 tests, 57 assertions)
+```
 
-- Newer pages use prepared statements and reusable helpers more consistently than older pages.
-- CSRF protection is present in several newer forms.
-- Password storage still uses MD5 in older authentication logic, which is not secure by modern standards.
-- Schema updates are triggered at runtime through helper logic instead of a dedicated migration system.
-- Automated application tests are not yet included.
+All tests pass. The suite exercises the currency options and symbols, money formatting, HTML escaping, month-key generation, currency validation, budget-progress clamping, CSRF token verification, receipt-upload validation, receipt deletion, the report helpers, and the syntax validity of every PHP page. The Playwright end-to-end script completes its full run against a local XAMPP instance and prints a passing result.
 
-## Suggested Validation Improvements
+### Coverage
 
-- Add a repeatable test checklist for all main workflows.
-- Introduce unit tests for helper functions.
-- Add integration tests for login, expense creation, recurring processing, and report generation.
-- Add security-focused validation for authentication and file uploads.
+Coverage is strongest at the two ends of the system — the reusable helper functions and the full browser workflows — and lighter in the middle, where individual page logic is still only exercised indirectly.
+
+- Areas covered by unit tests: currency handling, formatting and escaping, budgeting maths, CSRF verification, and receipt-file validation and deletion.
+- Areas covered by the syntax smoke test: every PHP file in the project root and in `includes/`.
+- Areas covered by the end-to-end test: login and invalid-login handling, registration, the protected-page redirect, item, category, budget, and expense creation, expense filtering, recurring-expense creation, and navigation across the dashboard, expense, report, profile, and password pages.
+
+### Future testing plans
+
+To raise coverage further, additional tests should be added for the edit and delete flows, for a real CSV-download assertion, and for security-focused cases around authentication and file uploads. Introducing a dedicated test database would also allow the page logic to be tested directly rather than only through the browser.
+
+### Comments with respect to the requirements' acceptance criteria
+
+The automated and manual tests were derived from the functional requirements and their acceptance criteria. Each requirement group has a matching entry in the acceptance checklist, so that a passing run corresponds directly to the behaviour promised in the Requirements section.
+
+## Acceptance test
+
+Acceptance testing was carried out manually to confirm that the application meets its requirements from the user's point of view. The scenarios were taken directly from the user stories and functional requirements.
+
+### Test cases
+
+1. User registration
+    - Description: Verify that a new user can register with valid details.
+    - Outcome: Passed. The account was created and could then be used to log in; a duplicate email was correctly rejected.
+
+2. Login and logout
+    - Description: Verify that a registered user can log in and log out.
+    - Outcome: Passed. Valid credentials reached the dashboard, invalid credentials were refused, and logging out required signing in again for protected pages.
+
+3. Add expense
+    - Description: Verify that an expense can be created with valid details.
+    - Outcome: Passed. The expense was stored and appeared immediately in the list and the dashboard totals.
+
+4. Edit and delete expense
+    - Description: Verify that an existing expense can be updated and removed.
+    - Outcome: Passed. Edited values were saved correctly, and a deleted expense (along with its receipt) no longer appeared.
+
+5. Search, filter, and export
+    - Description: Verify that filtering narrows the list and that the result can be exported.
+    - Outcome: Passed. Only matching records were shown, and the CSV export contained the same filtered data.
+
+6. Categories and budgets
+    - Description: Verify that categories and monthly budgets can be created and are reflected elsewhere.
+    - Outcome: Passed. New categories became available in the expense forms, and budget status appeared in the category and dashboard views.
+
+7. Recurring expenses
+    - Description: Verify that a recurring rule generates due expenses automatically.
+    - Outcome: Passed. Weekly and monthly rules were stored, and due expenses were inserted into the expense table when the application was next opened.
+
+8. Reports
+    - Description: Verify that date-wise, month-wise, and year-wise reports display correct summaries and charts.
+    - Outcome: Passed. Report totals, averages, detailed tables, and the category breakdown matched the selected period, and CSV export and printing worked.
+
+### Comments with respect to the requirements' acceptance criteria
+
+All acceptance tests confirmed that the application fulfils the key user requirements defined in the project documentation. Where the tests revealed weaker areas — notably in legacy authentication code — these are recorded honestly in the Self-evaluation and Future work sections rather than hidden.

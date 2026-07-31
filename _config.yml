@@ -15,4 +15,5 @@ footer_content: "Software engineering report for the Expense Tracker System proj
 
 exclude:
   - sections
+  - diagrams
 
