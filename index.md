@@ -19,3 +19,22 @@ Each expense is entered through a short form: the date, the item, the amount, th
 The system is meant for one person at a time, and that shaped most of the design decisions. Someone stretching a monthly allowance, someone who spends in more than one currency, or someone who just wants to see where the year went should all be able to add a purchase, compare it against a budget, and see it reflected in the charts within a few clicks.
 
 The application is built with PHP and MySQL and runs on a standard XAMPP stack (Apache with MariaDB/MySQL). As an academic case study it works well because it solves an everyday problem, connects several modules around one shared database, and shows a gradual move away from a legacy procedural codebase towards reusable helper functions, prepared statements, output escaping, and CSRF protection. That migration is not finished, and this report is honest about where it stops.
+
+## Repositories
+
+The project is split across two repositories, so that the software and its documentation can be reviewed separately:
+
+- the **artifact repository** holds the application source, its tests, and its CI workflows;
+- the **report repository** holds this report and is the source of the site you are reading.
+
+## Declaration on the use of AI tools
+
+Parts of this project were produced with the help of an AI coding assistant (Anthropic's Claude, used through Claude Code). This is disclosed here because the assistance is also visible in the repository: the commits it contributed to carry a `Co-Authored-By: Claude` trailer, which is why the name appears in the artifact repository's contributor list. Ten commits in the history are marked this way.
+
+The assistant was used for three kinds of work:
+
+- **This report.** Drafting and revising the chapters, including the revision that produced the current wording, and checking the text against the code so that the claims made here match what the repository actually contains.
+- **Parts of the application.** The dashboard metric cards and their later refactoring, the category breakdown, average-per-period figure, and print option added to the detailed report pages, and the demonstration seed data.
+- **Repository configuration.** Adjustments to the GitHub Actions workflow triggers and to the report site configuration.
+
+The remainder of the history, which is the larger part of it, is recorded under the author's name alone. Every AI-assisted change was read and tested before being committed, and the author is responsible for the content of this report and for the behaviour of the software it describes.

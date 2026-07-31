@@ -12,6 +12,10 @@ I used **Git** for version control, with **GitHub** as the remote. The workflow 
 
 Commit messages follow the Conventional Commits format `<type>: <subject>`, where the type is one of `feat`, `fix`, `docs`, `test`, `style`, or `chore`. Reading `git log --oneline` then tells you at a glance whether a commit added a feature, fixed a bug, or only touched the documentation.
 
+Some commits also carry a `Co-Authored-By: Claude` trailer, which records where an AI assistant contributed to the change. That is why the name appears among the contributors of the artifact repository. The scope of that assistance is set out in the declaration on the [Home](index.md) page.
+
+The application source and this report live in two separate repositories. The artifact repository holds the code, the tests, and the CI workflows; this repository holds the report and publishes the site. Keeping them apart avoids having two copies of the same document drifting out of step, which is what happened while the report was also kept as a folder inside the artifact repository.
+
 ## Implementation details
 
 The project started as a plain procedural PHP application, with SQL, HTML, and business logic all mixed together in the same file. That was quick to write and became difficult to change. As the feature set grew, most of the engineering effort went into pulling the shared logic out of the pages and into reusable helpers, without breaking what already worked.
