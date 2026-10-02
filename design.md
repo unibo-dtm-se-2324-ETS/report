@@ -23,15 +23,7 @@ The application is organised as a **layered architecture** with three layers: wh
 The **domain** of the Expense Tracker System is personal finance management. Its **bounded context** is the recording and analysis of one user's expenses, plus the concepts that give those expenses meaning: categories, budgets, and recurring rules. Anything outside that boundary, such as bank integration or shared household accounts, was deliberately left out.
 
 The **domain model** exists so that the application can store, aggregate, and present spending consistently. I kept it to a small number of concepts, because every extra entity would have had to be carried through the forms, the reports, and the database.
-
-```text
-User 1 ────────< Expense >──────── 1 Category
-  │                                     │
-  ├────< Item                           ├────< Budget
-  ├────< Category                       └────< RecurringRule
-  ├────< Budget
-  └────< RecurringRule
-```
+![Domain model diagram](pictures/domain-model-diagram.png)
 
 1. *Entities*. The central entity is the `Expense`. It belongs to one user and carries:
     - `id`, the unique identifier used when editing or deleting;
