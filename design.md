@@ -16,34 +16,7 @@ The application is organised as a **layered architecture** with three layers: wh
 
 3. *Data layer*: the MySQL database, reached through the shared connection in `includes/dbconnection.php`, responsible for storing and returning the user's records.
 
-```text
-+----------------------------+
-|        Web browser         |
-|     (GUI: pages, charts)   |
-+-------------+--------------+
-              |
-              v
-+----------------------------+
-|     PHP presentation       |
-|  auth · dashboard ·        |
-|  expenses · reports        |
-+-------------+--------------+
-              |
-              v
-+----------------------------+
-|    Shared helper logic     |
-|  validation · formatting · |
-|  CSRF · budgets · recurring|
-+-------------+--------------+
-              |
-              v
-+----------------------------+
-|      MySQL database        |
-|  tbluser · tblexpense ·    |
-|  tblcategories · tblbudgets|
-|  tblrecurring · tblitems   |
-+----------------------------+
-```
+![Architecture diagram](pictures/architecture-diagram.png)
 
 ## Modelling
 
@@ -98,15 +71,7 @@ The project is not a formal Domain-Driven Design implementation, but several tac
 
 The sequence below shows what happens when an expense is added. The browser posts the form, the PHP page calls the helpers to check the CSRF token and validate the values, the helpers run a prepared statement, and the result travels back up so the page can show a confirmation and the refreshed list.
 
-```text
-User -> Browser        : fill and submit the add-expense form
-Browser -> PHP page    : POST expense data (with CSRF token)
-PHP page -> Helpers    : verify CSRF, validate and format input
-Helpers -> Database    : prepared INSERT into tblexpense
-Database -> Helpers    : insert result
-Helpers -> PHP page    : success or error outcome
-PHP page -> Browser    : show confirmation and refreshed list
-```
+![Add-expense sequence diagram](pictures/add-expense-sequence-diagram.png)
 
 The other write workflows follow the same shape, including editing an expense and creating categories, budgets, and recurring rules.
 
@@ -114,26 +79,11 @@ The other write workflows follow the same shape, including editing an expense an
 
 The state diagram below is the lifecycle of an expense. It starts as *draft input* in the form, becomes *stored* once submitted and accepted, and from there can be *edited* (which returns it to stored) or *deleted*, after which it is gone along with its receipt file.
 
-```text
-Draft input --submit--> Validated --save--> Stored
-                                              |  ^
-                                         edit |  | save
-                                              v  |
-                                            Edited
-                                              |
-                                        delete v
-                                           Deleted
-```
+![Expense lifecycle diagram](pictures/expense-lifecycle-diagram.png)
 
 Recurring rules have a related lifecycle. A rule is *created* and becomes *active*; each time its next run date is reached, it *generates* an expense and advances its schedule; the user can move it to an *inactive* state to stop further generation.
 
-```text
-Created --> Active --due date--> Generates expense --> Active
-              |
-       deactivate
-              v
-           Inactive
-```
+![Recurring rule lifecycle diagram](pictures/recurring-lifecycle-diagram.png)
 
 ## Data-related aspects
 

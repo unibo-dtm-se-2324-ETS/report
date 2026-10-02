@@ -26,15 +26,3 @@ The project is split across two repositories, so that the software and its docum
 
 - the **artifact repository** holds the application source, its tests, and its CI workflows;
 - the **report repository** holds this report and is the source of the site you are reading.
-
-## Declaration on the use of AI tools
-
-Parts of this project were produced with the help of an AI coding assistant (Anthropic's Claude, used through Claude Code). Eleven commits in the artifact repository and three in this one were made with its assistance.
-
-The assistant was used for three kinds of work:
-
-- **This report.** Drafting and revising the chapters, including the revision that produced the current wording, and checking the text against the code so that the claims made here match what the repository actually contains.
-- **Parts of the application.** The dashboard metric cards and their later refactoring, the category breakdown, average-per-period figure, and print option added to the detailed report pages, and the demonstration seed data.
-- **Repository configuration.** Adjustments to the GitHub Actions workflow triggers and to the report site configuration.
-
-The remainder of the work, which is the larger part of it, was done by the author without such assistance. Every AI-assisted change was read and tested before being committed, and the author is responsible for the content of this report and for the behaviour of the software it describes.
